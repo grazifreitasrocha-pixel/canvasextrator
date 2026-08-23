@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Análise Fiscal — NCM × TIPI × Benefícios</title>
+<style>
+  :root {
+    --bg: #f7f8f6;
+    --painel: #ffffff;
+    --borda: #dde1dc;
+    --texto: #1c2a24;
+    --texto-suave: #5b6b62;
+    --verde: #2f6b4f;
+    --verde-claro: #e6f2eb;
+    --azul: #2c5f8a;
+    --azul-claro: #e7f0f7;
+    --alerta: #b3432e;
+    --alerta-claro: #fbe9e5;
+    --mono: "IBM Plex Mono", "SF Mono", Menlo, monospace;
+    --sans: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--texto);
+    font-family: var(--sans);
+    font-size: 14px;
+  }
+  header {
+    background: var(--texto);
+    color: #fff;
+    padding: 14px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  header .marca {
+    font-family: var(--mono);
+    font-size: 14px;
+    letter-spacing: 0.02em;
+  }
+  header .marca b { color: #9fd8b6; }
+  header .usuario { font-size: 13px; color: #cfd6d1; display: flex; gap: 12px; align-items: center; }
+  header button {
+    background: transparent;
+    border: 1px solid #4a5850;
+    color: #cfd6d1;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  header button:hover { background: #2a352f; }
+
+  main { max-width: 980px; margin: 0 auto; padding: 32px 24px 80px; }
+
+  /* --- Tela de login --- */
+  .login-wrap {
+    max-width: 380px;
+    margin: 80px auto;
+    background: var(--painel);
+    border: 1px solid var(--borda);
+    border-radius: 8px;
+    padding: 32px;
+  }
+  .login-wrap h1 {
+    font-family: var(--mono);
+    font-size: 16px;
+    margin: 0 0 4px;
+  }
+  .login-wrap p.sub { color: var(--texto-suave); margin: 0 0 24px; font-size: 13px; }
+  .campo { margin-bottom: 14px; }
+  .campo label { display: block; font-size: 12px; color: var(--texto-suave); margin-bottom: 4px; }
+  .campo input {
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid var(--borda);
+    border-radius: 5px;
+    font-size: 14px;
+    font-family: var(--sans);
+  }
+  .campo input:focus { outline: 2px solid var(--verde); outline-offset: 1px; }
+  .btn-principal {
+    width: 100%;
+    padding: 10px;
+    background: var(--verde);
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 6px;
+  }
+  .btn-principal:hover { background: #255a41; }
+  .btn-principal:disabled { background: #9fb5ab; cursor: default; }
+  .alterna-modo {
+    text-align: center;
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--texto-suave);
+  }
+  .alterna-modo a { color: var(--verde); cursor: pointer; text-decoration: underline; }
+  .erro-msg {
+    background: var(--alerta-claro);
+    color: var(--alerta);
+    padding: 8px 10px;
+    border-radius: 5px;
+    font-size: 13px;
+    margin-bottom: 14px;
+  }
+
+  /* --- Área logada --- */
+  .painel-upload {
+    background: var(--painel);
+    border: 1px solid var(--borda);
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 28px;
+  }
+  .painel-upload h2 { font-size: 15px; margin: 0 0 4px; }
+  .painel-upload p { color: var(--texto-suave); margin: 0 0 16px; font-size: 13px; }
+
+  .dropzone {
+    border: 2px dashed var(--borda);
+    border-radius: 8px;
+    padding: 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .dropzone:hover, .dropzone.arrastando {
+    border-color: var(--verde);
+    background: var(--verde-claro);
+  }
+  .dropzone .icone { font-family: var(--mono); font-size: 22px; color: var(--texto-suave); margin-bottom: 8px; }
+  .dropzone .texto-principal { font-size: 14px; margin-bottom: 4px; }
+  .dropzone .texto-secundario { font-size: 12px; color: var(--texto-suave); }
+  .dropzone input[type=file] { display: none; }
+
+  .status-processando {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px;
+    background: var(--azul-claro);
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--azul);
+    margin-top: 14px;
+  }
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid #b9d3e6;
+    border-top-color: var(--azul);
+    border-radius: 50%;
+    animation: girar 0.7s linear infinite;
+  }
+  @keyframes girar { to { transform: rotate(360deg); } }
+
+  .secao-lotes h2 { font-size: 15px; margin: 0 0 14px; }
+  table.lotes { width: 100%; border-collapse: collapse; background: var(--painel); border: 1px solid var(--borda); border-radius: 8px; overflow: hidden; }
+  table.lotes th {
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--texto-suave);
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--borda);
+    background: #fafbfa;
+  }
+  table.lotes td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--borda);
+    font-size: 13px;
+    vertical-align: middle;
+  }
+  table.lotes tr:last-child td { border-bottom: none; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge.concluido { background: var(--verde-claro); color: var(--verde); }
+  .badge.processando { background: var(--azul-claro); color: var(--azul); }
+  .badge.erro { background: var(--alerta-claro); color: var(--alerta); }
+  .num { font-family: var(--mono); }
+  .btn-baixar {
+    background: var(--texto);
+    color: #fff;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 5px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .btn-baixar:hover { background: #34433b; }
+  .btn-baixar:disabled { background: #c7cec8; cursor: default; }
+  .vazio { text-align: center; padding: 40px; color: var(--texto-suave); font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+const API_URL = window.API_URL || "";
+// String vazia = mesma origem (o frontend agora é servido pelo próprio
+// backend no Railway, então as chamadas de API são para o mesmo domínio,
+// sem precisar apontar para uma URL externa nem lidar com CORS entre domínios)
+
+let estado = {
+  token: localStorage.getItem("token") || null,
+  nomeUsuario: localStorage.getItem("nomeUsuario") || null,
+  modoLogin: true, // true = login, false = registrar
+  lotes: [],
+  enviando: false,
+  erro: null,
+};
+
+function salvarSessao(token, nome) {
+  estado.token = token;
+  estado.nomeUsuario = nome;
+  localStorage.setItem("token", token);
+  localStorage.setItem("nomeUsuario", nome);
+}
+
+function sair() {
+  estado.token = null;
+  estado.nomeUsuario = null;
+  localStorage.removeItem("token");
+  localStorage.removeItem("nomeUsuario");
+  render();
+}
+
+async function chamarApi(caminho, opcoes = {}) {
+  const headers = opcoes.headers || {};
+  if (estado.token) headers["Authorization"] = "Bearer " + estado.token;
+  const resp = await fetch(API_URL + caminho, { ...opcoes, headers });
+  if (resp.status === 401) {
+    sair();
+    throw new Error("Sessão expirada, faça login novamente.");
+  }
+  return resp;
+}
+
+async function fazerLogin(email, senha) {
+  estado.erro = null;
+  const form = new URLSearchParams();
+  form.set("username", email);
+  form.set("password", senha);
+  const resp = await fetch(API_URL + "/auth/login", { method: "POST", body: form });
+  const dados = await resp.json();
+  if (!resp.ok) {
+    estado.erro = dados.detail || "Não foi possível entrar.";
+    render();
+    return;
+  }
+  salvarSessao(dados.access_token, dados.nome);
+  await carregarLotes();
+  render();
+}
+
+async function fazerRegistro(nome, email, senha) {
+  estado.erro = null;
+  const resp = await fetch(API_URL + "/auth/registrar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nome, email, senha }),
+  });
+  const dados = await resp.json();
+  if (!resp.ok) {
+    estado.erro = dados.detail || "Não foi possível criar a conta.";
+    render();
+    return;
+  }
+  await fazerLogin(email, senha);
+}
+
+async function carregarLotes() {
+  try {
+    const resp = await chamarApi("/lotes");
+    if (resp.ok) estado.lotes = await resp.json();
+  } catch (e) { /* erro já tratado em chamarApi */ }
+}
+
+async function enviarArquivo(arquivo) {
+  if (!arquivo.name.toLowerCase().endsWith(".zip")) {
+    estado.erro = "Envie um arquivo .zip contendo os XMLs de NF-e.";
+    render();
+    return;
+  }
+  estado.enviando = true;
+  estado.erro = null;
+  render();
+
+  const formData = new FormData();
+  formData.append("arquivo", arquivo);
+
+  try {
+    const resp = await chamarApi("/lotes/upload", { method: "POST", body: formData });
+    const dados = await resp.json();
+    if (!resp.ok) {
+      estado.erro = dados.detail || "Erro ao processar o arquivo.";
+    } else {
+      // O upload responde na hora (status "processando") — o processamento
+      // pesado roda em segundo plano no servidor. Atualiza a lista agora
+      // e começa a checar periodicamente até o lote terminar.
+      await carregarLotes();
+      iniciarChecagemPeriodica();
+    }
+  } catch (e) {
+    estado.erro = e.message;
+  }
+  estado.enviando = false;
+  render();
+}
+
+let intervaloChecagem = null;
+
+function iniciarChecagemPeriodica() {
+  if (intervaloChecagem) return; // já tem uma checagem rodando
+  intervaloChecagem = setInterval(async () => {
+    await carregarLotes();
+    const aindaProcessando = estado.lotes.some(l => l.status === "processando");
+    render();
+    if (!aindaProcessando) {
+      clearInterval(intervaloChecagem);
+      intervaloChecagem = null;
+    }
+  }, 3000);
+}
+
+async function baixarPlanilha(loteId, nomeArquivo) {
+  const resp = await chamarApi(`/lotes/${loteId}/download`);
+  if (!resp.ok) { alert("Não foi possível baixar a planilha."); return; }
+  const blob = await resp.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `analise_${nomeArquivo.replace(".zip", "")}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function formatarData(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function rotuloStatus(status) {
+  if (status === "concluido") return "Concluído";
+  if (status === "processando") return "Processando";
+  return "Erro";
+}
+
+// ---------------------------------------------------------------------
+// Renderização
+// ---------------------------------------------------------------------
+
+function renderLogin() {
+  const app = document.getElementById("app");
+  app.innerHTML = `
+    <main>
+      <div class="login-wrap">
+        <h1>Análise Fiscal</h1>
+        <p class="sub">NCM × TIPI × Benefícios Fiscais</p>
+        ${estado.erro ? `<div class="erro-msg">${estado.erro}</div>` : ""}
+        <form id="form-auth">
+          ${!estado.modoLogin ? `
+            <div class="campo">
+              <label for="nome">Nome</label>
+              <input type="text" id="nome" required>
+            </div>` : ""}
+          <div class="campo">
+            <label for="email">E-mail</label>
+            <input type="email" id="email" required>
+          </div>
+          <div class="campo">
+            <label for="senha">Senha</label>
+            <input type="password" id="senha" required minlength="6">
+          </div>
+          <button type="submit" class="btn-principal">${estado.modoLogin ? "Entrar" : "Criar conta"}</button>
+        </form>
+        <div class="alterna-modo">
+          ${estado.modoLogin
+            ? `Ainda não tem conta? <a id="alternar">Criar uma</a>`
+            : `Já tem conta? <a id="alternar">Entrar</a>`}
+        </div>
+      </div>
+    </main>
+  `;
+
+  document.getElementById("form-auth").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const email = document.getElementById("email").value;
+    const senha = document.getElementById("senha").value;
+    if (estado.modoLogin) {
+      fazerLogin(email, senha);
+    } else {
+      const nome = document.getElementById("nome").value;
+      fazerRegistro(nome, email, senha);
+    }
+  });
+
+  document.getElementById("alternar").addEventListener("click", () => {
+    estado.modoLogin = !estado.modoLogin;
+    estado.erro = null;
+    render();
+  });
+}
+
+function renderApp() {
+  const app = document.getElementById("app");
+
+  const linhasTabela = estado.lotes.length === 0
+    ? `<tr><td colspan="6" class="vazio">Nenhum lote enviado ainda. Suba um ZIP de XMLs acima para começar.</td></tr>`
+    : estado.lotes.map(lote => `
+        <tr>
+          <td>${lote.nome_arquivo}</td>
+          <td><span class="badge ${lote.status}">${rotuloStatus(lote.status)}</span></td>
+          <td class="num">${lote.total_itens}</td>
+          <td class="num">${lote.total_com_beneficio_icms}</td>
+          <td class="num">${lote.total_com_beneficio_piscofins}</td>
+          <td>${formatarData(lote.criado_em)}</td>
+          <td>
+            <button class="btn-baixar" ${lote.status !== "concluido" ? "disabled" : ""}
+              onclick="baixarPlanilha('${lote.id}', '${lote.nome_arquivo}')">
+              Baixar Excel
+            </button>
+          </td>
+        </tr>
+      `).join("");
+
+  app.innerHTML = `
+    <header>
+      <div class="marca">análise<b>fiscal</b></div>
+      <div class="usuario">
+        ${estado.nomeUsuario}
+        <button id="btn-sair">Sair</button>
+      </div>
+    </header>
+    <main>
+      <div class="painel-upload">
+        <h2>Novo lote</h2>
+        <p>Envie um arquivo .zip contendo os XMLs de NF-e para cruzar contra NCM, TIPI e benefícios fiscais.</p>
+        ${estado.erro ? `<div class="erro-msg">${estado.erro}</div>` : ""}
+        <label class="dropzone" id="dropzone">
+          <div class="icone">↑</div>
+          <div class="texto-principal">Arraste o .zip aqui ou clique para escolher</div>
+          <div class="texto-secundario">Apenas arquivos .zip contendo XMLs de NF-e</div>
+          <input type="file" id="input-arquivo" accept=".zip">
+        </label>
+        ${estado.enviando ? `
+          <div class="status-processando">
+            <div class="spinner"></div>
+            Enviando arquivo...
+          </div>` : ""}
+      </div>
+
+      <div class="secao-lotes">
+        <h2>Lotes processados</h2>
+        <table class="lotes">
+          <thead>
+            <tr>
+              <th>Arquivo</th>
+              <th>Status</th>
+              <th>Itens</th>
+              <th>Benef. ICMS</th>
+              <th>Benef. PIS/COFINS</th>
+              <th>Enviado em</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${linhasTabela}</tbody>
+        </table>
+      </div>
+    </main>
+  `;
+
+  document.getElementById("btn-sair").addEventListener("click", sair);
+
+  const dropzone = document.getElementById("dropzone");
+  const inputArquivo = document.getElementById("input-arquivo");
+
+  inputArquivo.addEventListener("change", (e) => {
+    if (e.target.files.length > 0) enviarArquivo(e.target.files[0]);
+  });
+
+  dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("arrastando"); });
+  dropzone.addEventListener("dragleave", () => dropzone.classList.remove("arrastando"));
+  dropzone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropzone.classList.remove("arrastando");
+    if (e.dataTransfer.files.length > 0) enviarArquivo(e.dataTransfer.files[0]);
+  });
+}
+
+function render() {
+  if (!estado.token) {
+    renderLogin();
+  } else {
+    renderApp();
+  }
+}
+
+// Inicialização
+(async function iniciar() {
+  if (estado.token) {
+    await carregarLotes();
+    if (estado.lotes.some(l => l.status === "processando")) {
+      iniciarChecagemPeriodica();
+    }
+  }
+  render();
+})();
+</script>
+</body>
+</html>
