@@ -30,6 +30,7 @@ class ItemNota:
     codigo_produto: Optional[str]
     descricao_produto: str
     ncm: str
+    cest: Optional[str]
     cfop: Optional[str]
     cst: Optional[str]
     ean: Optional[str]
@@ -145,6 +146,7 @@ def parsear_xml_nfe(conteudo_xml: bytes, nome_arquivo: str) -> NotaFiscal:
             codigo_produto=_texto(prod, "nfe:cProd"),
             descricao_produto=_texto(prod, "nfe:xProd", default="(sem descrição)"),
             ncm=_texto(prod, "nfe:NCM", default=""),
+            cest=_texto(prod, "nfe:CEST"),
             cfop=_texto(prod, "nfe:CFOP"),
             cst=cst,
             ean=_texto(prod, "nfe:cEAN"),
@@ -210,6 +212,7 @@ def extrair_itens_flat(resultado_processamento: dict) -> list:
                 "nome_emitente": nota["nome_emitente"],
                 "descricao_produto": item["descricao_produto"],
                 "ncm": item["ncm"],
+                "cest": item.get("cest"),
                 "cfop": item["cfop"],
                 "quantidade": item["quantidade"],
                 "valor_total": item["valor_total"],

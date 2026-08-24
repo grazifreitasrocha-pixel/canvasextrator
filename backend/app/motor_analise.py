@@ -113,24 +113,44 @@ def _buscar_regime_monofasico(ncm: str, tabela_monofasico: list) -> Optional[Reg
     return None
 
 
-def _buscar_substituicao_tributaria(ncm: str, tabela_st: list) -> list:
+def _buscar_substituicao_tributaria(ncm: str, tabela_st: list, cest_item: Optional[str] = None) -> list:
     """
-    tabela_st: lista de dicts {ncm, ncm_prefixo, cest, uf, mva_percentual,
-        norma_titulo, observacoes}
+    tabela_st: lista de dicts que podem vir de duas fontes diferentes:
+      - por NCM (ex: parser_st_apendice2.py): {ncm, ncm_prefixo, cest, uf,
+        mva_percentual, norma_titulo, observacoes}
+      - por CEST (ex: parser_confaz_st.py): {cest, uf, mva_percentual,
+        norma_titulo, observacoes} — sem campo "ncm"
+
+    Casa por NCM quando a regra tiver NCM, e por CEST quando o item da
+    nota trouxer CEST preenchido (campo nativo do XML da NF-e) e a regra
+    também for indexada por CEST. O CEST é o identificador nacional
+    oficial de substituição tributária — quando disponível, é a forma
+    mais confiável de cruzamento, mais até que o NCM.
     """
     encontrados = []
     for r in tabela_st:
-        ncm_regra = r["ncm"]
-        match = ncm.startswith(ncm_regra) if r.get("ncm_prefixo") else ncm == ncm_regra
-        if match:
-            encontrados.append(SubstituicaoTributaria(
-                cest=r.get("cest"),
-                uf=r.get("uf"),
-                mva_percentual=r.get("mva_percentual"),
-                norma_titulo=r.get("norma_titulo"),
-                observacoes=r.get("observacoes"),
-            ))
-    return encontrados
+        tem_ncm_na_regra = "ncm" in r and r.get("ncm")
+        if tem_ncm_na_regra:
+            ncm_regra = r["ncm"]
+            match = ncm.startswith(ncm_regra) if r.get("ncm_prefixo") else ncm == ncm_regra
+            if match:
+                encontrados.append(r)
+                continue
+
+        if cest_item and r.get("cest") and not tem_ncm_na_regra:
+            if str(r["cest"]).strip() == str(cest_item).strip():
+                encontrados.append(r)
+
+    return [
+        SubstituicaoTributaria(
+            cest=r.get("cest"),
+            uf=r.get("uf"),
+            mva_percentual=r.get("mva_percentual"),
+            norma_titulo=r.get("norma_titulo"),
+            observacoes=r.get("observacoes"),
+        )
+        for r in encontrados
+    ]
 
 
 def analisar_item(
@@ -140,6 +160,7 @@ def analisar_item(
     beneficios_cadastrados: list,
     tabela_monofasico: Optional[list] = None,
     tabela_st: Optional[list] = None,
+    cest: Optional[str] = None,
 ) -> ResultadoItem:
     """
     Executa o cruzamento completo para um item (produto + NCM).
@@ -148,7 +169,10 @@ def analisar_item(
     beneficios_cadastrados: lista de benefícios (ver _buscar_beneficios_para_ncm),
         cada um com "tributo" igual a "ICMS" ou "PIS/COFINS".
     tabela_monofasico: lista do parser_sped_piscofins.py (opcional)
-    tabela_st: lista de regras de substituição tributária de ICMS (opcional)
+    tabela_st: lista de regras de substituição tributária de ICMS (opcional),
+        indexadas por NCM e/ou por CEST (ver _buscar_substituicao_tributaria)
+    cest: CEST do item, quando disponível no XML da nota (campo nativo
+        <CEST> da NF-e) — usado para casar regras de ST indexadas por CEST
     """
     tabela_monofasico = tabela_monofasico or []
     tabela_st = tabela_st or []
@@ -186,7 +210,7 @@ def analisar_item(
     tem_beneficio_piscofins = len(beneficios_piscofins) > 0
 
     regime_monofasico = _buscar_regime_monofasico(ncm, tabela_monofasico)
-    detalhe_st = _buscar_substituicao_tributaria(ncm, tabela_st)
+    detalhe_st = _buscar_substituicao_tributaria(ncm, tabela_st, cest_item=cest)
     sujeito_st_icms = len(detalhe_st) > 0
 
     # Monta o texto de análise
@@ -285,6 +309,7 @@ def analisar_lote(
         analisar_item(
             item["descricao_produto"], item["ncm"], tipi_por_ncm,
             beneficios_cadastrados, tabela_monofasico, tabela_st,
+            cest=item.get("cest"),
         )
         for item in itens
     ]
