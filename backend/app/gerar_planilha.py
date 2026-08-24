@@ -57,6 +57,21 @@ def _detalhe_st(detalhe_st):
     )
 
 
+def _classificar_regime_diferenciado(regime_monofasico) -> str:
+    """
+    Classifica o regime de PIS/COFINS numa das três situações que o
+    usuário quer ver na planilha:
+      - "MONOFÁSICO"    — sujeito a regime monofásico, com alíquota concentrada própria
+      - "ALÍQUOTA ZERO" — sujeito a regime monofásico, mas com alíquota zerada (revenda)
+      - "NÃO"           — não identificado em nenhum regime diferenciado
+    """
+    if not regime_monofasico:
+        return "NÃO"
+    if regime_monofasico.aliquota_zero:
+        return "ALÍQUOTA ZERO"
+    return "MONOFÁSICO"
+
+
 def _detalhe_monofasico(regime_monofasico):
     if not regime_monofasico:
         return "-"
@@ -73,7 +88,7 @@ def _preencher_aba_resumo(ws, resultados, pareceres_ia):
     cabecalho = [
         "Descrição do Produto", "NCM", "NCM Válido (TIPI)",
         "Tem Benefício ICMS", "Sujeito a ST-ICMS",
-        "Tem Benefício PIS/COFINS", "Regime Monofásico PIS/COFINS",
+        "Tem Benefício PIS/COFINS", "Regime Diferenciado PIS/COFINS",
         "Descrição TIPI", "Alíquota IPI",
         "Classificação Coerente (IA)", "Alerta",
     ]
@@ -83,13 +98,14 @@ def _preencher_aba_resumo(ws, resultados, pareceres_ia):
         chave_ia = f"{r.ncm}|{r.descricao_produto}"
         parecer = pareceres_ia.get(chave_ia)
         coerente_txt = ("Sim" if parecer.classificacao_coerente else "NÃO") if parecer else "-"
+        regime_txt = _classificar_regime_diferenciado(r.regime_monofasico)
 
         linha = [
             r.descricao_produto, r.ncm, "Sim" if r.ncm_valido else "Não",
             "Sim" if r.tem_beneficio_icms else "Não",
             "Sim" if r.sujeito_st_icms else "Não",
             "Sim" if r.tem_beneficio_piscofins else "Não",
-            "Sim" if r.regime_monofasico else "Não",
+            regime_txt,
             r.tipi_descricao or "-", r.tipi_aliquota_ipi or "-",
             coerente_txt, r.alerta or "-",
         ]
@@ -98,7 +114,7 @@ def _preencher_aba_resumo(ws, resultados, pareceres_ia):
         ws.cell(row=linha_atual, column=4).fill = FUNDO_SIM if r.tem_beneficio_icms else FUNDO_NAO
         ws.cell(row=linha_atual, column=5).fill = FUNDO_REGIME_ESPECIAL if r.sujeito_st_icms else FUNDO_NAO
         ws.cell(row=linha_atual, column=6).fill = FUNDO_SIM if r.tem_beneficio_piscofins else FUNDO_NAO
-        ws.cell(row=linha_atual, column=7).fill = FUNDO_REGIME_ESPECIAL if r.regime_monofasico else FUNDO_NAO
+        ws.cell(row=linha_atual, column=7).fill = FUNDO_REGIME_ESPECIAL if regime_txt != "NÃO" else FUNDO_NAO
 
         if r.alerta:
             for col_idx in range(1, len(cabecalho) + 1):
@@ -136,24 +152,25 @@ def _preencher_aba_icms(ws, resultados):
 def _preencher_aba_piscofins(ws, resultados):
     cabecalho = [
         "Descrição do Produto", "NCM", "Tem Benefício PIS/COFINS",
-        "Detalhe do Benefício PIS/COFINS", "Regime Monofásico", "Detalhe do Regime Monofásico",
+        "Detalhe do Benefício PIS/COFINS", "Regime Diferenciado", "Detalhe do Regime Diferenciado",
     ]
     _estilizar_cabecalho(ws, cabecalho)
 
     for r in resultados:
+        regime_txt = _classificar_regime_diferenciado(r.regime_monofasico)
         linha = [
             r.descricao_produto, r.ncm,
             "Sim" if r.tem_beneficio_piscofins else "Não",
             _detalhe_beneficios(r.beneficios_piscofins),
-            "Sim" if r.regime_monofasico else "Não",
+            regime_txt,
             _detalhe_monofasico(r.regime_monofasico),
         ]
         ws.append(linha)
         linha_atual = ws.max_row
         ws.cell(row=linha_atual, column=3).fill = FUNDO_SIM if r.tem_beneficio_piscofins else FUNDO_NAO
-        ws.cell(row=linha_atual, column=5).fill = FUNDO_REGIME_ESPECIAL if r.regime_monofasico else FUNDO_NAO
+        ws.cell(row=linha_atual, column=5).fill = FUNDO_REGIME_ESPECIAL if regime_txt != "NÃO" else FUNDO_NAO
 
-    _ajustar_larguras(ws, [35, 12, 18, 50, 16, 50])
+    _ajustar_larguras(ws, [35, 12, 18, 50, 18, 50])
 
 
 def _preencher_aba_ia(ws, resultados, pareceres_ia):
