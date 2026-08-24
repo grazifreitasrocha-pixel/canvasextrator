@@ -1,5 +1,9 @@
 FROM python:3.11-slim
 
+# Garante que os prints apareçam imediatamente no log do Railway,
+# sem ficar "segurados" em buffer até acumular um bloco de saída
+ENV PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
 COPY requirements.txt .

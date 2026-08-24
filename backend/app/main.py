@@ -264,25 +264,54 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
 
 def _processar_lote_em_background(lote_id: str, caminho_zip: str):
     """Roda o pipeline de processamento e atualiza o registro do lote no banco."""
+    import traceback
+
+    print(f"[lote {lote_id}] iniciando processamento de {caminho_zip}")
     db = SessionLocal()
     try:
         lote = db.query(Lote).filter(Lote.id == lote_id).first()
+        if not lote:
+            print(f"[lote {lote_id}] ERRO: registro do lote não encontrado no banco")
+            return
 
+        print(f"[lote {lote_id}] lendo ZIP...")
         resultado_zip = processar_zip_nfe(caminho_zip)
+        print(f"[lote {lote_id}] ZIP lido: {resultado_zip['total_arquivos']} arquivos, "
+              f"{resultado_zip['total_processados']} processados, "
+              f"{resultado_zip['total_erros']} com erro")
+        if resultado_zip["erros"]:
+            for e in resultado_zip["erros"][:5]:
+                print(f"[lote {lote_id}]   erro no arquivo {e['arquivo']}: {e['erro']}")
+
         itens = extrair_itens_flat(resultado_zip)
+        print(f"[lote {lote_id}] itens extraídos: {len(itens)}")
 
         if not itens:
+            detalhe = (
+                f"ZIP continha {resultado_zip['total_arquivos']} arquivo(s) .xml, "
+                f"{resultado_zip['total_processados']} processado(s) com sucesso, "
+                f"{resultado_zip['total_erros']} com erro de leitura. "
+                f"Nenhum item de produto foi encontrado nas notas."
+            )
+            if resultado_zip["total_arquivos"] == 0:
+                detalhe = "O ZIP enviado não contém nenhum arquivo .xml (verifique se o .zip não tem apenas pastas ou outro tipo de arquivo dentro)."
+            elif resultado_zip["erros"]:
+                detalhe += f" Primeiro erro: {resultado_zip['erros'][0]['erro']}"
+
+            print(f"[lote {lote_id}] finalizando com erro: {detalhe}")
             lote.status = "erro"
-            lote.mensagem_erro = "Nenhum item extraído do ZIP enviado."
+            lote.mensagem_erro = detalhe
             db.commit()
             return
 
+        print(f"[lote {lote_id}] cruzando contra as bases...")
         beneficios_cadastrados = BASES_CARREGADAS["beneficios_icms"] + BASES_CARREGADAS["beneficios_piscofins"]
         resultados = analisar_lote(
             itens, BASES_CARREGADAS["tipi"], beneficios_cadastrados,
             BASES_CARREGADAS["monofasico"], BASES_CARREGADAS["substituicao_tributaria"],
         )
 
+        print(f"[lote {lote_id}] gerando planilha...")
         caminho_planilha = str(PASTA_ARQUIVOS / f"{lote_id}.xlsx")
         gerar_planilha_resultado(resultados, caminho_planilha)
 
@@ -294,11 +323,14 @@ def _processar_lote_em_background(lote_id: str, caminho_zip: str):
         lote.caminho_planilha = caminho_planilha
         lote.concluido_em = datetime.utcnow()
         db.commit()
+        print(f"[lote {lote_id}] concluído com sucesso: {len(resultados)} itens")
     except Exception as e:
+        erro_completo = traceback.format_exc()
+        print(f"[lote {lote_id}] EXCEÇÃO NÃO TRATADA:\n{erro_completo}")
         lote = db.query(Lote).filter(Lote.id == lote_id).first()
         if lote:
             lote.status = "erro"
-            lote.mensagem_erro = str(e)
+            lote.mensagem_erro = f"{type(e).__name__}: {e}"
             db.commit()
     finally:
         db.close()
