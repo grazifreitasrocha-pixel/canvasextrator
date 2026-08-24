@@ -18,6 +18,13 @@ antes de plugar no Postgres.
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 
+# CFOP esperado em operações de venda de mercadoria já sujeita à
+# substituição tributária (contribuinte substituído revendendo produto
+# cujo ICMS-ST já foi retido anteriormente). Operações interestaduais
+# equivalentes usam 6403 — não coberto por esta validação, que hoje
+# verifica apenas o código interno (5403).
+CFOP_ESPERADO_PARA_ST = "5403"
+
 
 @dataclass
 class BeneficioEncontrado:
@@ -63,6 +70,10 @@ class ResultadoItem:
     detalhe_st: list               # list[SubstituicaoTributaria] (pode haver mais de uma regra por UF)
     analise: str
     alerta: Optional[str] = None
+    cfop: Optional[str] = None
+    numero_nf: Optional[str] = None
+    chave_acesso: Optional[str] = None
+    cfop_st_divergente: bool = False   # True = produto sujeito a ST mas CFOP não é o esperado (5403)
 
 
 def _buscar_beneficios_para_ncm(ncm: str, beneficios_cadastrados: list) -> list:
@@ -161,6 +172,9 @@ def analisar_item(
     tabela_monofasico: Optional[list] = None,
     tabela_st: Optional[list] = None,
     cest: Optional[str] = None,
+    cfop: Optional[str] = None,
+    numero_nf: Optional[str] = None,
+    chave_acesso: Optional[str] = None,
 ) -> ResultadoItem:
     """
     Executa o cruzamento completo para um item (produto + NCM).
@@ -173,6 +187,10 @@ def analisar_item(
         indexadas por NCM e/ou por CEST (ver _buscar_substituicao_tributaria)
     cest: CEST do item, quando disponível no XML da nota (campo nativo
         <CEST> da NF-e) — usado para casar regras de ST indexadas por CEST
+    cfop: CFOP do item na nota, usado para validar se a nota está usando
+        o código correto (5403) quando o produto é sujeito a ST
+    numero_nf, chave_acesso: identificação da nota de origem, só para
+        rastreabilidade nos avisos gerados (não afeta o cruzamento)
     """
     tabela_monofasico = tabela_monofasico or []
     tabela_st = tabela_st or []
@@ -274,6 +292,24 @@ def analisar_item(
     else:
         partes_analise.append("Não identificado em regra de Substituição Tributária de ICMS cadastrada.")
 
+    # Validação: para usar o benefício/tratamento de ST, a nota de saída
+    # precisa estar com o CFOP correto (5403 — venda de mercadoria já
+    # sujeita à ST, na condição de substituído). Só avalia quando o
+    # produto foi de fato identificado como sujeito a ST.
+    cfop_st_divergente = False
+    if sujeito_st_icms and cfop and cfop != CFOP_ESPERADO_PARA_ST:
+        cfop_st_divergente = True
+        partes_analise.append(
+            f"ATENÇÃO: produto sujeito a ST, mas o CFOP da nota é {cfop} "
+            f"(esperado {CFOP_ESPERADO_PARA_ST} para venda de mercadoria já tributada por ST)."
+        )
+    elif sujeito_st_icms and not cfop:
+        cfop_st_divergente = True
+        partes_analise.append(
+            f"ATENÇÃO: produto sujeito a ST, mas a nota não trouxe CFOP identificável "
+            f"para conferir se corresponde ao esperado ({CFOP_ESPERADO_PARA_ST})."
+        )
+
     return ResultadoItem(
         descricao_produto=descricao_produto,
         ncm=ncm,
@@ -289,6 +325,10 @@ def analisar_item(
         detalhe_st=detalhe_st,
         analise=" ".join(partes_analise),
         alerta=alerta,
+        cfop=cfop,
+        numero_nf=numero_nf,
+        chave_acesso=chave_acesso,
+        cfop_st_divergente=cfop_st_divergente,
     )
 
 
@@ -310,6 +350,9 @@ def analisar_lote(
             item["descricao_produto"], item["ncm"], tipi_por_ncm,
             beneficios_cadastrados, tabela_monofasico, tabela_st,
             cest=item.get("cest"),
+            cfop=item.get("cfop"),
+            numero_nf=item.get("numero_nf"),
+            chave_acesso=item.get("chave_acesso"),
         )
         for item in itens
     ]

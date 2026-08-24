@@ -10,6 +10,7 @@ Estrutura em abas separadas:
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
+from motor_analise import CFOP_ESPERADO_PARA_ST
 
 
 FONTE_CABECALHO = Font(bold=True, color="FFFFFF")
@@ -198,14 +199,49 @@ def _preencher_aba_ia(ws, resultados, pareceres_ia):
     _ajustar_larguras(ws, [35, 12, 35, 18, 12, 50, 16])
 
 
+def _preencher_aba_avisos(ws, resultados):
+    """
+    Lista as notas/itens onde há divergência entre o CFOP usado e o CFOP
+    esperado (5403) para produtos identificados como sujeitos a
+    Substituição Tributária de ICMS — sinal de que a nota pode não estar
+    aproveitando/refletindo corretamente o tratamento de ST.
+    """
+    cabecalho = [
+        "Descrição do Produto", "NCM", "CEST/Detalhe ST",
+        "CFOP Usado", "CFOP Esperado", "Número NF", "Chave de Acesso",
+    ]
+    _estilizar_cabecalho(ws, cabecalho)
+
+    divergentes = [r for r in resultados if r.cfop_st_divergente]
+
+    for r in divergentes:
+        detalhe_st_curto = "; ".join(
+            f"CEST {s.cest or '-'}" for s in r.detalhe_st
+        ) if r.detalhe_st else "-"
+
+        linha = [
+            r.descricao_produto, r.ncm, detalhe_st_curto,
+            r.cfop or "(não informado)", CFOP_ESPERADO_PARA_ST,
+            r.numero_nf or "-", r.chave_acesso or "-",
+        ]
+        ws.append(linha)
+        for col_idx in range(1, len(cabecalho) + 1):
+            ws.cell(row=ws.max_row, column=col_idx).fill = FUNDO_ALERTA
+
+    if not divergentes:
+        ws.append(["Nenhuma divergência de CFOP encontrada para produtos sujeitos a ST. ✓"] + [""] * (len(cabecalho) - 1))
+
+    _ajustar_larguras(ws, [35, 12, 25, 14, 16, 14, 45])
+
+
 def gerar_planilha_resultado(resultados: list, caminho_saida: str, pareceres_ia: dict = None):
     """
     resultados: lista de ResultadoItem (do motor_analise.py)
     caminho_saida: caminho do .xlsx a ser gerado
     pareceres_ia: dict opcional {ncm+descricao: ParecerIA}, do classificador_ia.py.
 
-    Gera a planilha em abas separadas: Resumo, ICMS, PIS-COFINS e (se houver
-    pareceres de IA) uma aba extra "Classificação IA".
+    Gera a planilha em abas separadas: Resumo, ICMS, PIS-COFINS, Avisos e
+    (se houver pareceres de IA) uma aba extra "Classificação IA".
     """
     pareceres_ia = pareceres_ia or {}
 
@@ -219,6 +255,9 @@ def gerar_planilha_resultado(resultados: list, caminho_saida: str, pareceres_ia:
 
     ws_piscofins = wb.create_sheet("PIS-COFINS")
     _preencher_aba_piscofins(ws_piscofins, resultados)
+
+    ws_avisos = wb.create_sheet("Avisos")
+    _preencher_aba_avisos(ws_avisos, resultados)
 
     if pareceres_ia:
         ws_ia = wb.create_sheet("Classificação IA")
