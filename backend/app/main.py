@@ -160,6 +160,7 @@ class LoteResumo(BaseModel):
     total_com_beneficio_icms: int
     total_com_beneficio_piscofins: int
     total_alertas: int
+    mensagem_erro: Optional[str] = None
     criado_em: datetime
 
     class Config:
@@ -211,7 +212,12 @@ PASTA_FRONTEND = Path(__file__).parent / "frontend"
 
 @app.get("/api/status")
 def status_api():
-    return {"status": "ok", "servico": "Sistema de Análise Fiscal"}
+    tipo_banco = "postgresql" if "postgresql" in DATABASE_URL else "sqlite (temporário — reseta a cada deploy)"
+    return {
+        "status": "ok",
+        "servico": "Sistema de Análise Fiscal",
+        "banco_de_dados": tipo_banco,
+    }
 
 
 @app.get("/")

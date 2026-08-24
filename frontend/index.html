@@ -423,7 +423,10 @@ function renderApp() {
     : estado.lotes.map(lote => `
         <tr>
           <td>${lote.nome_arquivo}</td>
-          <td><span class="badge ${lote.status}">${rotuloStatus(lote.status)}</span></td>
+          <td>
+            <span class="badge ${lote.status}">${rotuloStatus(lote.status)}</span>
+            ${lote.status === "erro" && lote.mensagem_erro ? `<div style="color:var(--alerta); font-size:11px; margin-top:4px; max-width:220px;">${lote.mensagem_erro}</div>` : ""}
+          </td>
           <td class="num">${lote.total_itens}</td>
           <td class="num">${lote.total_com_beneficio_icms}</td>
           <td class="num">${lote.total_com_beneficio_piscofins}</td>
