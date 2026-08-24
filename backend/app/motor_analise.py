@@ -21,9 +21,9 @@ from typing import Optional
 # CFOP esperado em operações de venda de mercadoria já sujeita à
 # substituição tributária (contribuinte substituído revendendo produto
 # cujo ICMS-ST já foi retido anteriormente). Operações interestaduais
-# equivalentes usam 6403 — não coberto por esta validação, que hoje
-# verifica apenas o código interno (5403).
-CFOP_ESPERADO_PARA_ST = "5403"
+# equivalentes usam 6405 — não coberto por esta validação, que hoje
+# verifica apenas o código interno (5405).
+CFOP_ESPERADO_PARA_ST = "5405"
 
 
 @dataclass
