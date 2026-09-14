@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, status, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -88,6 +88,7 @@ class Lote(Base):
     rbt12_usado = Column(Float, nullable=True)
     anexo_usado = Column(String, nullable=True)
     das_total = Column(Float, nullable=True)
+    aviso_pgdas = Column(Text, nullable=True)   # ex: "PGDAS enviado mas RBT12 não pôde ser extraído"
     criado_em = Column(DateTime, default=datetime.utcnow)
     concluido_em = Column(DateTime, nullable=True)
 
@@ -116,6 +117,7 @@ def _migrar_colunas_faltantes():
         "rbt12_usado": "DOUBLE PRECISION",
         "anexo_usado": "VARCHAR",
         "das_total": "DOUBLE PRECISION",
+        "aviso_pgdas": "TEXT",
     }
 
     with engine.connect() as conexao:
@@ -196,6 +198,7 @@ class LoteResumo(BaseModel):
     rbt12_usado: Optional[float] = None
     anexo_usado: Optional[str] = None
     das_total: Optional[float] = None
+    aviso_pgdas: Optional[str] = None
     criado_em: datetime
 
     class Config:
@@ -375,8 +378,8 @@ def upload_lote(
     background_tasks: BackgroundTasks,
     arquivo: UploadFile = File(...),
     pgdas: Optional[UploadFile] = File(None),
-    rbt12: Optional[float] = None,
-    anexo: Optional[str] = None,
+    rbt12: Optional[float] = Form(None),
+    anexo: Optional[str] = Form(None),
     usuario: Usuario = Depends(usuario_atual),
     db: Session = Depends(get_db),
 ):
@@ -395,6 +398,7 @@ def upload_lote(
     # Se o usuário subiu o PDF do PGDAS-D, extrai o RBT12 automaticamente
     # dele — tem prioridade sobre um valor de RBT12 digitado manualmente.
     rbt12_final = rbt12
+    aviso_pgdas = None
     if pgdas is not None and pgdas.filename:
         caminho_pgdas = str(PASTA_ARQUIVOS / f"{lote.id}_pgdas.pdf")
         with open(caminho_pgdas, "wb") as f:
@@ -406,12 +410,22 @@ def upload_lote(
                 rbt12_final = dados_pgdas.rbt12
                 print(f"[lote {lote.id}] RBT12 extraído do PGDAS: R$ {rbt12_final:,.2f}")
             else:
+                aviso_pgdas = (
+                    "O PDF do PGDAS-D foi recebido, mas não foi possível localizar o "
+                    "valor do RBT12 nele — o formato deste PDF pode ser diferente do "
+                    "esperado. O Simples Nacional NÃO foi calculado para este lote "
+                    "(a não ser que você também tenha digitado o RBT12 manualmente)."
+                )
                 print(f"[lote {lote.id}] AVISO: não foi possível extrair RBT12 do PGDAS enviado.")
         except Exception as e:
+            aviso_pgdas = f"Erro ao processar o PDF do PGDAS-D enviado: {e}"
             print(f"[lote {lote.id}] ERRO ao processar PGDAS: {e}")
 
     if not anexo:
         anexo = "I"  # Comércio é o padrão mais comum; ajustável via parâmetro
+
+    lote.aviso_pgdas = aviso_pgdas
+    db.commit()
 
     background_tasks.add_task(_processar_lote_em_background, lote.id, caminho_zip, rbt12_final, anexo)
 

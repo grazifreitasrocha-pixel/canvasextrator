@@ -119,6 +119,29 @@
   .btn-baixar:hover { background: #34433b; }
   .btn-baixar:disabled { background: #c7cec8; cursor: default; }
   .vazio { text-align: center; padding: 40px; color: var(--texto-suave); font-size: 13px; }
+
+  .btn-ver-simples {
+    background: transparent; border: 1px solid var(--verde); color: var(--verde);
+    padding: 5px 10px; border-radius: 5px; font-size: 11px; cursor: pointer; margin-top: 4px;
+  }
+  .btn-ver-simples:hover { background: var(--verde-claro); }
+
+  .linha-detalhe td { background: #fafbfa; padding: 0 !important; }
+  .painel-simples { padding: 20px 24px; }
+  .painel-simples-cabecalho {
+    display: flex; gap: 28px; margin-bottom: 16px; padding-bottom: 14px;
+    border-bottom: 1px solid var(--borda); flex-wrap: wrap;
+  }
+  .painel-simples-cabecalho > div { font-size: 14px; font-family: var(--mono); }
+  .rotulo-mini { font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--texto-suave); font-family: var(--sans); }
+  table.tabela-simples { width: 100%; border-collapse: collapse; }
+  table.tabela-simples th {
+    text-align: left; font-size: 11px; text-transform: uppercase; color: var(--texto-suave);
+    padding: 6px 10px; border-bottom: 1px solid var(--borda);
+  }
+  table.tabela-simples td { padding: 8px 10px; font-size: 13px; border-bottom: 1px solid #eef1ee; }
+  table.tabela-simples tfoot td { border-top: 2px solid var(--borda); border-bottom: none; padding-top: 10px; }
+  table.tabela-simples .num { font-family: var(--mono); text-align: right; }
 </style>
 </head>
 <body>
@@ -253,6 +276,60 @@ async function enviarLote() {
 }
 
 let intervaloChecagem = null;
+let loteExpandidoId = null;
+
+function alternarExpansao(loteId) {
+  loteExpandidoId = (loteExpandidoId === loteId) ? null : loteId;
+  render();
+}
+
+function formatarPercentual(valor) {
+  return (valor * 100).toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + "%";
+}
+
+function renderPainelSimples(apuracao) {
+  const linhas = [
+    ["Receita normal (sem ST, sem monofásico)", apuracao.receita_normal, apuracao.aliquota_efetiva, apuracao.das_receita_normal],
+    ["Receita sujeita a ST-ICMS", apuracao.receita_st, apuracao.aliquota_efetiva_st, apuracao.das_receita_st],
+    ["Receita em regime monofásico PIS/COFINS", apuracao.receita_monofasico, apuracao.aliquota_efetiva_monofasico, apuracao.das_receita_monofasico],
+    ["Receita com ST + monofásico", apuracao.receita_st_e_monofasico, apuracao.aliquota_efetiva_st_e_monofasico, apuracao.das_receita_st_e_monofasico],
+  ];
+
+  return `
+    <div class="painel-simples">
+      <div class="painel-simples-cabecalho">
+        <div><span class="rotulo-mini">Anexo</span><br>${apuracao.anexo}</div>
+        <div><span class="rotulo-mini">RBT12</span><br>${formatarMoeda(apuracao.rbt12)}</div>
+        <div><span class="rotulo-mini">Faixa</span><br>${apuracao.faixa}</div>
+        <div><span class="rotulo-mini">Alíquota nominal</span><br>${(apuracao.aliquota_nominal * 100).toFixed(2)}%</div>
+        <div><span class="rotulo-mini">Alíquota efetiva cheia</span><br>${formatarPercentual(apuracao.aliquota_efetiva)}</div>
+      </div>
+      <table class="tabela-simples">
+        <thead>
+          <tr><th>Segmento de receita</th><th>Receita do mês</th><th>Alíquota aplicada</th><th>DAS do segmento</th></tr>
+        </thead>
+        <tbody>
+          ${linhas.map(([nome, receita, aliquota, das]) => `
+            <tr>
+              <td>${nome}</td>
+              <td class="num">${formatarMoeda(receita)}</td>
+              <td class="num">${formatarPercentual(aliquota)}</td>
+              <td class="num">${formatarMoeda(das)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td><b>TOTAL</b></td>
+            <td class="num"><b>${formatarMoeda(apuracao.receita_total_mes)}</b></td>
+            <td></td>
+            <td class="num"><b>${formatarMoeda(apuracao.das_total)}</b></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  `;
+}
 
 function iniciarChecagemPeriodica() {
   if (intervaloChecagem) return;
@@ -343,26 +420,37 @@ function renderApp() {
 
   const linhasTabela = estado.lotes.length === 0
     ? `<tr><td colspan="8" class="vazio">Nenhum lote enviado ainda. Suba um ZIP de XMLs acima para começar.</td></tr>`
-    : estado.lotes.map(lote => `
+    : estado.lotes.flatMap(lote => {
+        const linhaPrincipal = `
         <tr>
           <td>${lote.nome_arquivo}</td>
           <td>
             <span class="badge ${lote.status}">${rotuloStatus(lote.status)}</span>
             ${lote.status === "erro" && lote.mensagem_erro ? `<div style="color:var(--alerta); font-size:11px; margin-top:4px; max-width:220px;">${lote.mensagem_erro}</div>` : ""}
+            ${lote.aviso_pgdas ? `<div style="color:#a66a00; font-size:11px; margin-top:4px; max-width:240px;">⚠️ ${lote.aviso_pgdas}</div>` : ""}
           </td>
           <td class="num">${lote.total_itens}</td>
           <td class="num">${lote.total_com_beneficio_icms}</td>
           <td class="num">${lote.total_com_beneficio_piscofins}</td>
           <td class="num">${lote.rbt12_usado ? formatarMoeda(lote.rbt12_usado) : "-"}</td>
-          <td class="num">${lote.das_total !== null && lote.das_total !== undefined ? formatarMoeda(lote.das_total) : "-"}</td>
+          <td class="num">
+            ${lote.das_total !== null && lote.das_total !== undefined ? formatarMoeda(lote.das_total) : "-"}
+            ${lote.apuracao_json ? `<br><button class="btn-ver-simples" onclick="alternarExpansao('${lote.id}')">${loteExpandidoId === lote.id ? "Ocultar cálculo" : "Ver cálculo"}</button>` : ""}
+          </td>
           <td>
             <button class="btn-baixar" ${lote.status !== "concluido" ? "disabled" : ""}
               onclick="baixarPlanilha('${lote.id}', '${lote.nome_arquivo}')">
               Baixar Excel
             </button>
           </td>
-        </tr>
-      `).join("");
+        </tr>`;
+
+        const linhaDetalhe = (loteExpandidoId === lote.id && lote.apuracao_json)
+          ? `<tr class="linha-detalhe"><td colspan="8">${renderPainelSimples(JSON.parse(lote.apuracao_json))}</td></tr>`
+          : "";
+
+        return [linhaPrincipal, linhaDetalhe];
+      }).join("");
 
   app.innerHTML = `
     <header>
