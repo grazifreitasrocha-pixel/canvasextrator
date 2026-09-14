@@ -95,6 +95,43 @@ class Lote(Base):
 Base.metadata.create_all(bind=engine)
 
 
+def _migrar_colunas_faltantes():
+    """
+    Base.metadata.create_all() só cria tabelas que ainda não existem —
+    ele NÃO adiciona colunas novas a tabelas já existentes. Como o banco
+    de produção foi criado antes de campos como rbt12_usado/anexo_usado/
+    das_total existirem no modelo, essa função confere e adiciona
+    qualquer coluna que esteja faltando, evitando erro 500 silencioso
+    no primeiro INSERT/UPDATE que tentar usar um campo inexistente.
+    """
+    from sqlalchemy import inspect, text
+
+    inspetor = inspect(engine)
+    if "lotes" not in inspetor.get_table_names():
+        return  # tabela ainda nem existe, create_all já cuidou dela certinha
+
+    colunas_existentes = {c["name"] for c in inspetor.get_columns("lotes")}
+
+    colunas_esperadas = {
+        "rbt12_usado": "DOUBLE PRECISION",
+        "anexo_usado": "VARCHAR",
+        "das_total": "DOUBLE PRECISION",
+    }
+
+    with engine.connect() as conexao:
+        for nome_coluna, tipo_sql in colunas_esperadas.items():
+            if nome_coluna not in colunas_existentes:
+                print(f"[migração] adicionando coluna faltante: lotes.{nome_coluna} ({tipo_sql})")
+                conexao.execute(text(f"ALTER TABLE lotes ADD COLUMN {nome_coluna} {tipo_sql}"))
+                conexao.commit()
+
+
+try:
+    _migrar_colunas_faltantes()
+except Exception as e:
+    print(f"[migração] AVISO: falha ao migrar colunas (pode ser normal em SQLite local): {e}")
+
+
 def get_db():
     db = SessionLocal()
     try:
